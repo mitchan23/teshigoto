@@ -2,35 +2,48 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { getLocalWorkflows, getLocalExecCount } from '@/lib/local-storage'
+import { getLocalWorkflows, getLocalExecCount, deleteLocalWorkflow } from '@/lib/local-storage'
 import { FREE_WORKFLOW_LIMIT, type Workflow } from '@/types/workflow'
 
 export default function DashboardPage() {
+  const router = useRouter()
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [plan, setPlan] = useState<'free' | 'pro'>('free')
   const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    async function load() {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        setIsLoggedIn(true)
-        const [{ data: wfs }, { data: sub }] = await Promise.all([
-          supabase.from('workflows').select('*').order('updated_at', { ascending: false }),
-          supabase.from('subscriptions').select('plan').eq('user_id', user.id).single(),
-        ])
-        setWorkflows((wfs as Workflow[]) ?? [])
-        setPlan((sub?.plan ?? 'free') as 'free' | 'pro')
-      } else {
-        setWorkflows(getLocalWorkflows())
-      }
-      setLoading(false)
+  async function loadWorkflows() {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      setIsLoggedIn(true)
+      const [{ data: wfs }, { data: sub }] = await Promise.all([
+        supabase.from('workflows').select('*').order('updated_at', { ascending: false }),
+        supabase.from('subscriptions').select('plan').eq('user_id', user.id).single(),
+      ])
+      setWorkflows((wfs as Workflow[]) ?? [])
+      setPlan((sub?.plan ?? 'free') as 'free' | 'pro')
+    } else {
+      setWorkflows(getLocalWorkflows())
     }
-    load()
-  }, [])
+    setLoading(false)
+  }
+
+  useEffect(() => { loadWorkflows() }, [])
+
+  async function handleDelete(wf: Workflow, e: React.MouseEvent) {
+    e.preventDefault()
+    if (!confirm(`「${wf.name}」を削除しますか？`)) return
+    if (isLoggedIn) {
+      const supabase = createClient()
+      await supabase.from('workflows').delete().eq('id', wf.id)
+    } else {
+      deleteLocalWorkflow(wf.id)
+    }
+    loadWorkflows()
+  }
 
   if (loading) return <div className="text-sm text-gray-400 py-20 text-center">読み込み中...</div>
 
@@ -96,22 +109,33 @@ export default function DashboardPage() {
           {workflows.map(wf => {
             const execCount = getLocalExecCount(wf.id)
             return (
-              <Link key={wf.id} href={`/workflows/${wf.id}`}
-                className="bg-white rounded-xl border border-gray-200 p-5 hover:border-indigo-300 hover:shadow-sm transition-all group">
+              <div key={wf.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:border-indigo-300 hover:shadow-sm transition-all group">
                 <div className="flex items-start justify-between gap-4">
-                  <div className="min-w-0">
+                  <Link href={`/workflows/${wf.id}`} className="min-w-0 flex-1">
                     <h3 className="font-semibold text-gray-900 group-hover:text-indigo-700">{wf.name}</h3>
                     {wf.description && <p className="text-sm text-gray-500 mt-1 truncate">{wf.description}</p>}
-                  </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
+                  </Link>
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {execCount > 0 && (
                       <span className="text-xs text-gray-400">{execCount}回実行</span>
                     )}
                     <span className="text-xs text-gray-400">{wf.steps.length} 工程</span>
-                    <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-medium">実行 →</span>
+                    <Link href={`/workflows/${wf.id}`}
+                      className="text-xs bg-indigo-50 text-indigo-700 px-2 py-1 rounded font-medium hover:bg-indigo-100">
+                      実行 →
+                    </Link>
+                    <Link href={`/workflows/${wf.id}/edit`}
+                      className="text-xs bg-gray-50 text-gray-600 px-2 py-1 rounded font-medium hover:bg-gray-100"
+                      onClick={e => e.stopPropagation()}>
+                      編集
+                    </Link>
+                    <button onClick={e => handleDelete(wf, e)}
+                      className="text-xs text-gray-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50">
+                      削除
+                    </button>
                   </div>
                 </div>
-              </Link>
+              </div>
             )
           })}
         </div>

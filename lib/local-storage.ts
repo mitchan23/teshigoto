@@ -44,6 +44,21 @@ export function saveLocalWorkflow(wf: Omit<Workflow, 'user_id'>): void {
   save(store)
 }
 
+export function updateLocalWorkflow(wf: Omit<Workflow, 'user_id'>): void {
+  if (typeof window === 'undefined') return
+  const store = load()
+  if (!store[wf.id]) return
+  store[wf.id] = { ...store[wf.id], ...wf, updated_at: new Date().toISOString() }
+  save(store)
+}
+
+export function deleteLocalWorkflow(id: string): void {
+  if (typeof window === 'undefined') return
+  const store = load()
+  delete store[id]
+  save(store)
+}
+
 export function countLocalWorkflows(): number {
   if (typeof window === 'undefined') return 0
   return Object.keys(load()).length
