@@ -23,10 +23,19 @@ export default function SettingsPage() {
 
   async function handleUpgrade() {
     setLoading(true)
-    const res = await fetch('/api/stripe/checkout', { method: 'POST' })
-    const { url } = await res.json()
-    if (url) window.location.href = url
-    else setLoading(false)
+    try {
+      const res = await fetch('/api/stripe/checkout', { method: 'POST' })
+      const data = await res.json()
+      if (data.url) {
+        window.location.href = data.url
+      } else {
+        alert('エラー: ' + (data.error || JSON.stringify(data)))
+        setLoading(false)
+      }
+    } catch (e) {
+      alert('通信エラー: ' + String(e))
+      setLoading(false)
+    }
   }
 
   async function handleSignOut() {
